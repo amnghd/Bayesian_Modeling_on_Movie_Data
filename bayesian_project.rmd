@@ -1,0 +1,82 @@
+---
+title: "Bayesian modeling and prediction for movies"
+output:
+  pdf_document: default
+  html_document:
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+library(BAS)
+library(GGally)
+```
+
+### Load data
+
+
+```{r load-data}
+load("movies.Rdata")
+```
+
+
+* * *
+
+## Part 1: Data
+
+
+**Acquisition**: This data is randomly selected from IMDB and Rotten Tompato APIs from movies produced before 2016.
+
+**Population**: To be included in this data set, the movie needs to be (1) in the Rotten Tomatoes and IMDB databases, (2) produced before 2016.
+
+**Causality/Generalization**: Since the data is randomly sampled from the discussed population and no ***random assignment*** is performed, the resultSs of this study does not demonstrate any causality. Any results could be merely used to demonstrate correlation. The results is also only generalizable to the poplation discussed above, which are movies in IMDB and RT databases, produced before 2016.
+
+* * *
+
+## Part 2: Data manipulation
+
+We are going to engineer four variables to include into our models.
+
+#### 2.1. Categorical ``feature_film`` with two levels (Yes,No)
+```{r}
+movies<- movies%>%mutate(feature_film = (title_type == 'Feature Film'))
+
+movies$feature_film<-factor(movies$feature_film, labels = c('No', 'Yes'))
+```
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+NOTE: Insert code chunks as needed by clicking on the "Insert a new code chunk" 
+button above. Make sure that your code is visible in the project you submit. 
+Delete this note when before you submit your work.
+
+* * *
+
+## Part 4: Modeling
+
+NOTE: Insert code chunks as needed by clicking on the "Insert a new code chunk" 
+button above. Make sure that your code is visible in the project you submit. 
+Delete this note when before you submit your work.
+
+* * *
+
+## Part 5: Prediction
+
+NOTE: Insert code chunks as needed by clicking on the "Insert a new code chunk" 
+button above. Make sure that your code is visible in the project you submit. 
+Delete this note when before you submit your work.
+
+* * *
+
+## Part 6: Conclusion
+
