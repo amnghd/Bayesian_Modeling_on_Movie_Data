@@ -18,6 +18,7 @@ library(dplyr)
 library(statsr)
 library(BAS)
 library(GGally)
+library(MASS)
 ```
 
 ### Load data
@@ -41,7 +42,7 @@ load("movies.Rdata")
 
 * * *
 
-## Part 2: Data manipulation
+## Part 2: Data manipulation (feature engineering)
 
 We are going to engineer four variables to include into our models.
 
@@ -52,21 +53,229 @@ movies<- movies%>%mutate(feature_film = (title_type == 'Feature Film'))
 movies$feature_film<-factor(movies$feature_film, labels = c('No', 'Yes'))
 ```
 
+#### 2.2. Categorical ``drama`` with two levels (Yes,No)
+```{r}
+movies<- movies%>%mutate(drama = (genre == 'Drama'))
+
+movies$drama<-factor(movies$drama, labels = c('No', 'Yes'))
+```
+
+
+#### 2.3. Categorical ``mpaa_rating_R`` with two levels (Yes,No)
+```{r}
+movies<- movies%>%mutate(mpaa_rating_R = (mpaa_rating == 'R'))
+
+movies$mpaa_rating_R<-factor(movies$mpaa_rating_R, labels = c('No', 'Yes'))
+```
+
+#### 2.4. Categorical ``oscar_season`` with two levels (Yes,No)
+
+For movies released in November, October, or December.
+```{r}
+movies<- movies%>%mutate(oscar_season = (thtr_rel_month %in% c(10,11,12)))
+
+movies$oscar_season<-factor(movies$oscar_season, labels = c('No', 'Yes'))
+```
+
+#### 2.5. Categorical ``summer_season`` with two levels (Yes,No)
+
+For movies released in May, June, July, or August
+```{r}
+movies<- movies%>%mutate(summer_season = (thtr_rel_month %in% c(5,6,7,8)))
+
+movies$summer_season<-factor(movies$summer_season, labels = c('No', 'Yes'))
+```
 * * *
 
 ## Part 3: Exploratory data analysis
 
-NOTE: Insert code chunks as needed by clicking on the "Insert a new code chunk" 
-button above. Make sure that your code is visible in the project you submit. 
-Delete this note when before you submit your work.
+We will conduct a "exploratory data analysis of the relationship between ```audience_score``` and the new variables constructed in the previous part."
 
+### 3.1. ``feature_film`` vs ``audience_score``
+
+#### Visualized EDA
+```{r}
+ggplot(data=movies, aes(x=feature_film, y=audience_score))+
+  geom_violin(trim = FALSE, draw_quantiles = c(0.25,0.5,0.75), show.legend = TRUE, color='black', fill='orange')
+```
+
+Our question here is whether being a feature fild can effect the audience score. he answer is yes. The median of the non-feature film audience score is even higher than the $0.75$ quantile of the feature film movies. We can see this also by summarizing the statistics.
+
+#### Summary Statistics EDA
+
+```{r}
+movies%>%group_by(feature_film)%>%summarise(n = n(), median =median(audience_score), mean =mean(audience_score), std = sd(audience_score), SE = sd(audience_score)/sqrt(n()))
+```
+Shaping a $95\%$ confidence interval we can roughly say that $CI = \mu\pm2\times SE$. Therefore, we can see that $CI_{no}= 81\pm2*1.7=(78.3,82.7)$ and $CI_{yes}= 60.5\pm2*0.81=(59.9,62.1)$. We can confidently say that these two distributions are not from the same population. We can also perform a hypothesis test, which is not the focus of this section.
+
+
+### 3.2. ``drama`` vs ``audience_score``
+
+#### Visualized EDA
+```{r}
+ggplot(data=movies, aes(x=drama, y=audience_score))+
+  geom_violin(trim = FALSE, draw_quantiles = c(0.25,0.5,0.75), show.legend = TRUE, color='black', fill='orange')
+```
+Although in general the drama movie tend to have higher audience score, more study is require to see if these two levels belong to different populations. We can double check that using the confidence interval.
+
+#### Summary Statistics EDA
+
+```{r}
+movies%>%group_by(drama)%>%summarise(n = n(), median =median(audience_score), mean =mean(audience_score), std = sd(audience_score), SE = sd(audience_score)/sqrt(n()))
+```
+Shaping a $95\%$ confidence interval we can roughly say that $CI = \mu\pm2\times SE$. Therefore, we can see that $CI_{no}= 59.8\pm2\times 1.1=(57.6,62)$ and $CI_{yes}= 65.3\pm2*1.1=(63.1,67.5)$. We can see that the confidence intervals of these two populations are further apart from each other and we can be confident that there is a statistically significant difference here.
+
+
+
+### 3.3. ``mpaa_rating_R`` vs ``audience_score``
+
+#### Visualized EDA
+```{r}
+ggplot(data=movies, aes(x=mpaa_rating_R, y=audience_score))+
+  geom_violin(trim = FALSE, draw_quantiles = c(0.25,0.5,0.75), show.legend = TRUE, color='black', fill='orange')
+```
+Graphically, it seems that there is no meaingful difference between the rater R movies and other movies. We can further investigate that using sthe summary statistics.
+
+#### Summary Statistics EDA
+
+```{r}
+movies%>%group_by(mpaa_rating_R)%>%summarise(n = n(), median =median(audience_score), mean =mean(audience_score), std = sd(audience_score), SE = sd(audience_score)/sqrt(n()))
+```
+Shaping a $95\%$ confidence interval we can roughly say that $CI = \mu\pm2\times SE$. Therefore, we can see that $CI_{no}= 62.7\pm2\times 1.1=(60.5,64.9)$ and $CI_{yes}= 62.0\pm2\times1.1=(59.8,64.2)$. We can see that the confidence interval for the mean values of these two groups have a significant overlap. We can confidently say that no variance is explained by this feature.
 * * *
+
+
+### 3.4. ``oscar/-season`` vs ``audience_score``
+
+#### Visualized EDA
+```{r}
+ggplot(data=movies, aes(x=oscar_season, y=audience_score))+
+  geom_violin(trim = FALSE, draw_quantiles = c(0.25,0.5,0.75), show.legend = TRUE, color='black', fill='orange')
+```
+Graphically, it seems that there is a small difference between the ratings of movies in oscar season and other movies. We can further investigate that using sthe summary statistics.
+
+#### Summary Statistics EDA
+
+```{r}
+movies%>%group_by(oscar_season)%>%summarise(n = n(), median =median(audience_score), mean =mean(audience_score), std = sd(audience_score), SE = sd(audience_score)/sqrt(n()))
+```
+Shaping a $95\%$ confidence interval we can roughly say that $CI = \mu\pm2\times SE$. Therefore, we can see that $CI_{no}= 61.8\pm2\times 0.9=(60,63.8)$ and $CI_{yes}= 63.7\pm2\times1.5=(60.7,66.7)$. We can see that the confidence interval for the mean values of these two groups have a significant overlap. We can confidently say that no variance is explained by this feature.
+
+### 3.5. ``summer_season`` vs ``audience_score``
+
+#### Visualized EDA
+```{r}
+ggplot(data=movies, aes(x=summer_season, y=audience_score))+
+  geom_violin(trim = FALSE, draw_quantiles = c(0.25,0.5,0.75), show.legend = TRUE, color='black', fill='orange')
+```
+Graphically, it seems that there is a small difference between the ratings of movies in summer season and other movies. We can further investigate that using the summary statistics.
+
+#### Summary Statistics EDA
+
+```{r}
+movies%>%group_by(summer_season)%>%summarise(n = n(), median =median(audience_score), mean =mean(audience_score), std = sd(audience_score), SE = sd(audience_score)/sqrt(n()))
+```
+Shaping a $95\%$ confidence interval we can roughly say that $CI = \mu\pm2\times SE$. Therefore, we can see that $CI_{no}= 62.6\pm2\times 1=(60.6,64.6)$ and $CI_{yes}= 61.8\pm2\times1.3=(59.2,64.4)$. We can see that the confidence interval for the mean values of these two groups have a significant overlap. We can confidently say that no variance is explained by this feature.
 
 ## Part 4: Modeling
 
-NOTE: Insert code chunks as needed by clicking on the "Insert a new code chunk" 
-button above. Make sure that your code is visible in the project you submit. 
-Delete this note when before you submit your work.
+We are going to "Develop a Bayesian regression model to predict audience_score from the following explanatory variables. Note that some of these variables are in the original dataset provided, and others are new variables  constructed earlier:"
+
+-``feature_film``
+
+-``drama``
+
+-``runtime``
+
+-``mpaa_rating_R``
+
+-``thtr_rel_year``
+
+-``oscar_season``
+
+-``summer_season``
+
+-``imdb_rating``
+
+-``imdb_num_votes``
+
+-``critics_score``
+
+-``best_pic_nom``
+
+-``best_pic_win``
+
+-``best_actor_win``
+
+-``best_actress_win``
+
+-``best_dir_win``
+
+-``top200_box``
+
+First we are going to make a new dataframe that only contains these features.
+
+```{r}
+features_to_keep = c("feature_film","drama", "runtime", "mpaa_rating_R", "thtr_rel_year","oscar_season", "summer_season","imdb_rating", "imdb_num_votes","critics_score", "best_pic_win", "best_actor_win", "best_actress_win","best_dir_win", "top200_box", "audience_score")
+new_movies <- movies%>%dplyr::select(one_of(features_to_keep))%>%na.omit()
+```
+Next we are going to generate the basic model that considers all of the mentioned features. Then, we need are going to make sure our model is accurate.
+
+```{r}
+m_movies_full <- lm(audience_score ~ ., data=new_movies)
+summary(m_movies_full)
+```
+Looking at the frequentiest significance of features (p-value) we can conclude that many of the featuers are not significance. Instead of using frequentist adjusted -$R^2$, we are going to use the Bayesian BIC criterion for model selection. "BIC (Bayesian Information Criterion) is based on the model fit, while penalizing feature numbers" (similar to adjusted $R^2$". Let's calculate the BIC for the full model
+
+```{r}
+BIC (m_movies_full)
+```
+I will write a for loop to go through all the independent variables and output a variable that its drop will generate highest decrease in the BIC.
+
+```{r}
+ind_var = c("feature_film","drama", "runtime", "mpaa_rating_R", "thtr_rel_year","oscar_season", "summer_season","imdb_rating", "imdb_num_votes","critics_score", "best_pic_win", "best_actor_win", "best_actress_win","best_dir_win", "top200_box")
+
+for (var in ind_var){
+    formula = as.formula(paste("audience_score",paste(var), sep = " ~ . -"))
+  model_arr = lm(formula, data = new_movies)
+  print(c(var, BIC(model_arr)))
+}
+print(model_summary)
+```
+Our full model's BIC was 4931.9. Droping ```best_pic_win``` from the model results in $BIC= 4925.4$ which shows the highest increase in the model persimonioty.
+
+Let's see if we can further decrease the BIC.
+
+```{r}
+ind_var_stp1 <- setdiff (ind_var, "best_pic_win")
+
+for (var in ind_var_stp1){
+    formula = as.formula(paste("audience_score",paste(var), sep = " ~ . -"))
+  model_arr = lm(formula, data = new_movies)
+  print(c(var, BIC(model_arr)))
+}
+print(model_summary)
+```
+As you might guess, this can be a quite crubsersome process. We actually performed similar frequentist analysis [here](https://github.com/amnghd/Movie_popularity_data_analysis/blob/master/reg_model_project.pdf). Instead of going into that details, R actualy has a function that performs a model selection backward by dropping faetures. The function is called stepAIC:
+
+```{r}
+
+model.lm<- lm(audience_score ~ ., data=new_movies)
+model.bic <- stepAIC(model.lm,direction='both',k=log(nrow(new_movies)), trace=0) 
+#k = log(n) is sometimes referred to as BIC or SBC
+
+```
+
+Looking at the trace from the final model, we see that the model with the best BIC is ``audience_score ~ runtime + imdb_rating + critics_score``. If you want to take a look at the trace of model selection, only assign ``TRUE`` to ``trace`` in the `stepAIC`` function.
+
+```{r}
+best_model <- lm (audience_score ~ runtime + imdb_rating + critics_score, data = new_movies)
+```
+
+
+After reaching an acceptable model, it is now time to perform a model diagnostics.
+
+### 4.1. Model Diagnostics
 
 * * *
 
