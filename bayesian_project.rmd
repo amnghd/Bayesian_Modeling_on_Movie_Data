@@ -240,7 +240,6 @@ for (var in ind_var){
   model_arr = lm(formula, data = new_movies)
   print(c(var, BIC(model_arr)))
 }
-print(model_summary)
 ```
 Our full model's BIC was 4931.9. Droping ```best_pic_win``` from the model results in $BIC= 4925.4$ which shows the highest increase in the model persimonioty.
 
@@ -254,7 +253,6 @@ for (var in ind_var_stp1){
   model_arr = lm(formula, data = new_movies)
   print(c(var, BIC(model_arr)))
 }
-print(model_summary)
 ```
 As you might guess, this can be a quite crubsersome process. We actually performed similar frequentist analysis [here](https://github.com/amnghd/Movie_popularity_data_analysis/blob/master/reg_model_project.pdf). Instead of going into that details, R actualy has a function that performs a model selection backward by dropping faetures. The function is called stepAIC:
 
@@ -272,20 +270,245 @@ Looking at the trace from the final model, we see that the model with the best B
 best_model <- lm (audience_score ~ runtime + imdb_rating + critics_score, data = new_movies)
 ```
 
+This is one single model, which is better than others. However, it doesnt necessary capture all the available information. We might have to ensemble this model we other models using Bayesian Model Averaging, or BMA.
 
-After reaching an acceptable model, it is now time to perform a model diagnostics.
+### 4.1. Bayesian Model Averaging
+```{r}
+bma_movies = bas.lm (audience_score ~ ., data=new_movies, prior = "BIC", modelprior =uniform())
+#bma_movies
+#summary(bma_movies)
+```
+The results can be quite detailed. It first mentios the posterior nclusion probablity of each feature. 
+We can see that four features have the posterior probablity of not being zero more than 0.2. These are runtime, mpaa_ratin_R, imdb_rating, critics_score. 
 
-### 4.1. Model Diagnostics
+Other than the variables, themselves, we need to also see which models have highest probablity. The results is shown in the summary of BMA computed aboce and is as follows:
+
+mode| model formula | posterior probablity | R2 | BIC
+----|---------------|----------------------|----|----
+1|audience_score ~ runtime+imdb_rating+critics_score|0.149|3615.27
+2|audience_score ~ imdb_rating + critics_score |0.148|3615.28
+3|audience_score ~ imdb_rating + critics_score+best_actor_win |0.038 |3616.65
+4|audience_score ~ mpaa_rating_R+imdb_rating+critics_score|0.37|3616.66
+5|audience_score ~ runtime+mpaa_rating_R+imdb_rating+critistcs_score|0.0357|3616.71
+
+As we also found using our BIC analysis, our first model is the best model. Notice that the posterior probablity is very low even for the best model. You should note that the model prior probablity for each model considering 15 variables (resulting in $2^{15}$ possibilities) is $p = 1/2^{15} =3*10^{-5}$. Therefore, reaching a posterior from such prior with only 650 records demonstrates that the model is reliable. 
+
+We can also briefly take a look at the posterior probablity of the dominant features and $95\%$ credible interval for the coeffcients of the averaged model.
+
+```{r}
+coef_movie = coefficients(bma_movies)
+par(mfrow = c(3,1))
+plot(coef_movie, subset = c(9,4,11), ask=FALSE)
+
+```
+```{r}
+confint(coef_movie)
+```
+From the figures we can see that the probablity of the coefficients being zero is extremely small. 
+
+After reaching an acceptable model, it is now time to perform a model diagnostics. The summary table of the included variables shows that the following variables can be beneficial to be included in the model :``runtime, mpaa_rating_R, imdb_rating, critistcs_score, best_actor_win``. Nmerical variables need to be checked for normality and linearity to assure that the model is accurate.
+
+
+
+### 4.2. Model Diagnostics
+
+After reaching an acceptable model, it is now time to perform a model diagnostics. The summary table of the included variables shows that the following variables can be beneficial to be included in the model :``runtime, mpaa_rating_R, imdb_rating, critistcs_score, best_actor_win```. Nmerical variables need to be checked for normality and linearity to assure that the model is accurate.
+
+#### 4.2.1. ```audience_score vs runtime```
+
+**Linearity **
+
+Let's check if ``audiece score`` is changing linearly with ``runtime``. We can check that by seeing how the residuals vary with the fitted value. If they show a random scatter around zero with equal variance, we can say that the data is normal. Let's look at the following figure.
+```{r}
+audience_runtime<-lm(data=new_movies, audience_score~runtime)
+ggplot(data = audience_runtime, aes(x = .fitted, y = .resid)) +
+  geom_point(color = 'chartreuse3') +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+
+```
+We can see that the conditions for linearity doesn hold for this feature. Since this variable demonstrated a very high inclusion posterior probablity, we need to see if we can keep it. Let's try a couple of transformations. First let's try log.
+
+```{r}
+new_movies<- new_movies%>%mutate(log_runtime = log(runtime))
+
+audience_logrun<-lm(data=new_movies, audience_score~log_runtime)
+ggplot(data = audience_logrun, aes(x = .fitted, y = .resid)) +
+  geom_point(color = 'darkgreen') +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+
+```
+Although the result still demonstrates no complete linearity, we can see improvement. Let's continue to see if other conditions hold.
+
+**Nearly Normal Residual**
+
+First we check the histogram of the residuals:
+
+```{r}
+ggplot(data = audience_logrun, aes(x = .resid)) +
+  geom_histogram(binwidth = 5, fill = 'chocolate1', color = 'black' ) +
+  xlab("Residuals")
+```
+We can hardly say that the residuals are normally distributed around 0. Let's take a look at quantile-quantile (qq) plot.
+
+```{r}
+ggplot(data = audience_logrun, aes(sample = .resid)) +
+  stat_qq(color = 'coral2')
+```
+```{r}
+ggplot(new_movies, aes(x=log_runtime, y=audience_score))+geom_jitter(color='goldenrod4')+
+  labs(x="runtime", y="IMDB Rating",
+       title = 'Scatter Plot of IMDB Rating vs Runtime')+
+  stat_smooth(method = "lm", se = TRUE)
+```
+The qq plot is also curved, which means it is not normal.
+
+
+
+#### 4.2.2. ```audience_score vs imdb_rating```
+
+**Linearity **
+
+Let's check if ``audiece score`` is changing linearly with ``imdb_rating``. We can check that by seeing how the residuals vary with the fitted value. If they show a random scatter around zero with equal variance, we can say that the data is normal. Let's look at the following figure.
+```{r}
+audience_imdb<-lm(data=new_movies, audience_score~imdb_rating)
+ggplot(data = audience_imdb, aes(x = .fitted, y = .resid)) +
+  geom_point(color = 'chartreuse3') +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+
+```
+We can see that the conditions for linearity doesn hold for this featurelog_audiencelog_audience. Since this variable demonstrated a very high inclusion posterior probablity, we need to see if we can keep it. Let's try a couple of transformations. First let's try log.
+
+```{r}
+new_movies<- new_movies%>%mutate(log_imdb = (imdb_rating)**3)
+
+audience_imdbrun<-lm(data=new_movies, audience_score~log_imdb)
+ggplot(data = audience_imdbrun, aes(x = .fitted, y = .resid)) +
+  geom_point(color = 'darkgreen') +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+
+```
+Although the results are a bit more linear, we still need to check the normality.
+
+**Nearly Normal Residual**
+
+First we check the histogram of the residuals:
+
+```{r}
+ggplot(data = audience_imdbrun, aes(x = .resid)) +
+  geom_histogram(binwidth = .07, fill = 'chocolate1', color = 'black' ) +
+  xlab("Residuals")
+```
+We can easily say that the residuals are normally distributed around 0. Let's take a look at quantile-quantile (qq) plot.
+
+```{r}
+ggplot(data = audience_imdbrun, aes(sample = .resid)) +
+  stat_qq(color = 'coral2')
+```
+qqplot is also almost linear.We can say that data is linear.
+```{r}
+ggplot(new_movies, aes(x=(log_imdb), y=audience_score))+geom_jitter(color='goldenrod4')+
+  labs(x="runtime", y="IMDB Rating",
+       title = 'Scatter Plot of IMDB Rating vs Runtime')+
+  stat_smooth(method = "lm", se = TRUE)
+```
+We can see that the new engineered feature ``imdb_log``` is linear and now its residuals are also normal.
+
+
+
+#### 4.2.3. ```audience_score vs critics_score```
+
+**Linearity **
+
+Let's check if ``audiece score`` is changing linearly with ``critics_score``. We can check that by seeing how the residuals vary with the fitted value. If they show a random scatter around zero with equal variance, we can say that the data is normal. Let's look at the following figure.
+```{r}
+audience_critics<-lm(data=new_movies, audience_score~critics_score)
+ggplot(data = audience_critics, aes(x = .fitted, y = .resid)) +
+  geom_point(color = 'chartreuse3') +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+
+```
+We can see that the conditions for linearity  hold for this feature. Its residual is scattered around 0 with constant variance.
+
+**Nearly Normal Residual**
+
+First we check the histogram of the residuals:
+
+```{r}
+ggplot(data = audience_critics, aes(x = .resid)) +
+  geom_histogram(binwidth = 7, fill = 'chocolate1', color = 'black' ) +
+  xlab("Residuals")
+```
+We can easily say that the residuals are normally distributed around 0. Let's take a look at quantile-quantile (qq) plot.
+
+```{r}
+ggplot(data = audience_critics, aes(sample = .resid)) +
+  stat_qq(color = 'coral2')
+```
+```{r}
+ggplot(new_movies, aes(x=critics_score, y=audience_score))+geom_jitter(color='goldenrod4')+
+  labs(x="runtime", y="IMDB Rating",
+       title = 'Scatter Plot of IMDB Rating vs Runtime')+
+  stat_smooth(method = "lm", se = TRUE)
+```
+
+So we end up using these features from the main data set.
+
+```{r}
+final_dataset <-new_movies%>%dplyr::select( mpaa_rating_R, log_imdb, critics_score, best_actor_win, audience_score)
+```
+
+
+
 
 * * *
 
 ## Part 5: Prediction
 
-NOTE: Insert code chunks as needed by clicking on the "Insert a new code chunk" 
-button above. Make sure that your code is visible in the project you submit. 
-Delete this note when before you submit your work.
+Let's predict the audience score for the movie "Batman Begins".
+```{r}
+model_movies_final <- lm(audience_score ~ ., data =final_dataset)
+
+new_movie <- data.frame(mpaa_rating_R = 'No', log_imdb=8.3**3, critics_score= 84, best_actor_win = 'no')
+
+predict(model_movies_final, new_movie, interval = "prediction", level = 0.95)
+
+#summary(model_movies_final)
+
+```
+The results of our prediction says that the ``audience_score`` lies between $83.2$ and $120.2$ for Batman Begins. 
+
+The actual ``audience_score`` is 94% which lies within our predicted value. 
+
+Let's see if we can do averaging preditcion.
+
+
+```{r}
+data.gprior =  bas.lm(audience_score ~ ., data=final_dataset, alpha=13, prior="g-prior")
+
+new_movie <- data.frame(mpaa_rating_R = 'No', log_imdb=8.3**3, critics_score= 84, best_actor_win = 'no')
+
+data.BMA = predict(data.gprior, newdata=new_movie, estimator="BMA", se.fit=TRUE, prediction=FALSE)
+
+confint(data.BMA)
+
+
+```
+The prediction from BMA (Bayesian Model Averaging) is even more accurate. The credible interval for the audience score is $(78.9,120.0)$. Also, the predicted value is $98.8\%$. This is 4.5% higher than the actual value. 
 
 * * *
 
 ## Part 6: Conclusion
 
+In this work we performed a study on the movie data acquired from IMDB and Rotten Tomato APIs. The goal of the study was to predict the popularity of the movie (its IMDB rating) from the available data using Bayesian Modelling and Averaging. We performed a linear regression backward elimination to develop the model. We performed model selection and dropped features that do not match the crierion.  Finally, we developed a $95%$ credible interval for the prediction of Batman Begins. Our prediction was correct and the actual IMDB rating was inside the credible interval. Our proposed research questions demonstrated high capability.
+
+,,
